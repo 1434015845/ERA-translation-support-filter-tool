@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ERA 脚本行提取与还原工具</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f8f9fa;--card:#fff;--border:#dee2e6;--text:#212529;--muted:#6c757d;
+  --primary:#343a40;--primary-fg:#fff;--amber:#f59e0b;--amber-bg:#fffbeb;
+  --blue:#3b82f6;--blue-bg:#eff6ff;--green:#22c55e;--green-bg:#f0fdf4;
+  --red:#ef4444;--hover:rgba(0,0,0,.05);--radius:8px;--shadow:0 1px 3px rgba(0,0,0,.1);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh;display:flex;flex-direction:column}
+.header{background:var(--card);border-bottom:1px solid var(--border);padding:16px 20px;position:sticky;top:0;z-index:100;box-shadow:var(--shadow)}
+.header-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;gap:12px}
+.header-icon{width:40px;height:40px;border-radius:var(--radius);background:var(--primary);color:var(--primary-fg);display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0}
+.header-title{font-size:18px;font-weight:700}
+.header-desc{font-size:13px;color:var(--muted)}
+.header-desc code{background:var(--bg);padding:1px 6px;border-radius:4px;font-family:monospace}
+.tabs{display:flex;gap:0;max-width:1100px;margin:20px auto 0;width:100%;border-bottom:2px solid var(--border)}
+.tab{padding:10px 24px;cursor:pointer;border:none;background:none;font-size:14px;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;transition:.2s;display:flex;align-items:center;gap:6px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.tab-icon{font-size:16px}
+main{flex:1;max-width:1100px;margin:0 auto;width:100%;padding:20px}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:20px;margin-bottom:16px;box-shadow:var(--shadow)}
+.card-title{font-size:15px;font-weight:600;margin-bottom:6px;display:flex;align-items:center;gap:8px}
+.card-desc{font-size:13px;color:var(--muted);margin-bottom:14px}
+.upload-zone{border:2px dashed var(--border);border-radius:var(--radius);padding:28px 20px;text-align:center;cursor:pointer;transition:.2s}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--primary);background:var(--hover)}
+.upload-zone .icon{font-size:32px;margin-bottom:8px;color:var(--muted)}
+.upload-zone .label{font-size:14px;font-weight:500;color:var(--text)}
+.upload-zone .hint{font-size:12px;color:var(--muted);margin-top:4px}
+.file-info{display:flex;align-items:center;justify-content:center;gap:8px;font-size:14px}
+.file-info .name{font-weight:600;color:var(--green)}
+.file-info .size{color:var(--muted);font-size:13px}
+.file-info .remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0 4px}
+.file-info .remove:hover{color:var(--red)}
+.btn{display:inline-flex;align-items:center;gap:6px;padding:10px 20px;border:none;border-radius:var(--radius);font-size:14px;font-weight:600;cursor:pointer;transition:.15s}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--primary);color:var(--primary-fg)}.btn-primary:hover:not(:disabled){background:#1a1d21}
+.btn-outline{background:var(--card);color:var(--text);border:1px solid var(--border)}.btn-outline:hover:not(:disabled){background:var(--hover)}
+.btn-success{background:var(--green);color:#fff}.btn-success:hover:not(:disabled){background:#16a34a}
+.btn-group{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}
+.stat{padding:14px;border-radius:var(--radius);text-align:center}
+.stat .num{font-size:24px;font-weight:700}
+.stat .label{font-size:12px;color:var(--muted)}
+.stat-total{background:var(--bg)}
+.stat-comment{background:var(--amber-bg)}.stat-comment .num{color:var(--amber)}
+.stat-print{background:var(--blue-bg)}.stat-print .num{color:var(--blue)}
+.stat-extracted{background:var(--green-bg)}.stat-extracted .num{color:var(--green)}
+.legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-bottom:8px}
+.legend-dot{width:12px;height:12px;border-radius:3px;display:inline-block;vertical-align:middle;margin-right:4px}
+.legend-dot.amber{background:var(--amber)}.legend-dot.blue{background:var(--blue)}
+.preview-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:768px){.preview-grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}}
+.code-view{height:500px;overflow:auto;border:1px solid var(--border);border-radius:var(--radius);font-family:Consolas,"Courier New",monospace;font-size:12px;background:#fff}
+.code-view .line{display:flex;border-bottom:1px solid #f1f1f1;padding:1px 0}
+.code-view .ln{width:44px;text-align:right;color:#999;padding-right:10px;flex-shrink:0;user-select:none;border-right:1px solid #eee}
+.code-view .lc{flex:1;padding-left:8px;white-space:pre-wrap;word-break:break-all}
+.code-view .line.comment{background:var(--amber-bg)}.code-view .line.print{background:var(--blue-bg)}
+.code-view .line.empty{opacity:.4}
+.badge{display:inline-block;padding:0 5px;border-radius:3px;font-size:10px;font-weight:600;margin-right:6px}
+.badge-comment{background:#fef3c7;color:#b45309;border:1px solid #fcd34d}
+.badge-print{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
+.badge-orig{background:#e5e7eb;color:#4b5563;border:1px solid #d1d5db}
+.alert{padding:12px 16px;border-radius:var(--radius);font-size:13px;display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.alert-warn{background:var(--amber-bg);color:#92400e;border:1px solid #fcd34d}
+.alert-ok{background:var(--green-bg);color:#166534;border:1px solid #86efac}
+.label{font-size:13px;font-weight:600;margin-bottom:6px;display:block}
+.footer{text-align:center;padding:14px;font-size:12px;color:var(--muted);border-top:1px solid var(--border);margin-top:auto}
+.restore-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="header-inner">
+    <div class="header-icon">&#8644;</div>
+    <div>
+      <div class="header-title">ERA 脚本行提取与还原工具</div>
+      <div class="header-desc">批量提取以 <code>;</code> 和 <code>PRINT</code> 开头的行，并支持还原</div>
+    </div>
+  </div>
+</div>
+
+<div class="tabs">
+  <button class="tab active" onclick="switchTab('extract')"><span class="tab-icon">&#9986;</span> 提取行</button>
+  <button class="tab" onclick="switchTab('restore')"><span class="tab-icon">&#8634;</span> 还原行</button>
+</div>
+
+<main>
+<!-- ============ 提取面板 ============ -->
+<div id="panel-extract" class="panel active">
+  <div class="card">
+    <div class="card-title">&#128194; 上传原始文件</div>
+    <div class="card-desc">上传 ERA 脚本文件（.ERB / .TXT），工具将自动识别以 ; 和 PRINT 开头的行，支持 Shift_JIS / UTF-8 编码</div>
+    <div class="upload-zone" id="extractDrop" onclick="document.getElementById('extractInput').click()">
+      <div class="icon">&#128193;</div>
+      <div class="label">点击或拖拽上传文件</div>
+      <div class="hint">支持 .ERB, .TXT 等文本文件</div>
+    </div>
+    <input type="file" id="extractInput" accept=".txt,.erb,.TXT,.ERB,.csv,.CSV" style="display:none" onchange="onExtractFileSelect(this)">
+    <div id="extractFileInfo" style="margin-top:10px"></div>
+  </div>
+
+  <div id="extractError" style="display:none"></div>
+  <div id="extractResult" style="display:none">
+    <div class="card">
+      <div class="card-title" style="color:var(--green)">&#10003; 提取结果统计</div>
+      <div id="extractStats" class="stats"></div>
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="downloadExtracted()">&#11015; 下载提取文件</button>
+        <button class="btn btn-outline" onclick="downloadCleaned()">&#11015; 下载清理后文件</button>
+      </div>
+    </div>
+
+    <div class="preview-grid">
+      <div class="card">
+        <div class="card-title">&#128065; 原始文件预览</div>
+        <div class="legend">
+          <span><span class="legend-dot amber"></span>注释行 (;)</span>
+          <span><span class="legend-dot blue"></span>PRINT 行</span>
+        </div>
+        <div id="originalPreview" class="code-view"></div>
+      </div>
+      <div class="card">
+        <div class="card-title">提取内容预览</div>
+        <div class="card-desc" id="extractCountDesc"></div>
+        <div id="extractedPreview" class="code-view"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 还原面板 ============ -->
+<div id="panel-restore" class="panel">
+  <div class="card">
+    <div class="card-title">&#8634; 上传文件进行还原</div>
+    <div class="card-desc">上传提取工具生成的「清理后文件」和「提取文件」，将提取的行还原回原始位置</div>
+
+    <label class="label">清理后的文件</label>
+    <div class="upload-zone" id="cleanedDrop" onclick="document.getElementById('cleanedInput').click()" style="margin-bottom:16px">
+      <div class="icon">&#128193;</div>
+      <div class="label">点击或拖拽上传清理后的文件</div>
+      <div class="hint">即「清理后_xxx.txt」</div>
+    </div>
+    <input type="file" id="cleanedInput" accept=".txt,.erb,.TXT,.ERB" style="display:none" onchange="onCleanedFileSelect(this)">
+    <div id="cleanedFileInfo" style="margin-bottom:12px"></div>
+
+    <label class="label">提取文件</label>
+    <div class="upload-zone" id="extractedDrop" onclick="document.getElementById('extractedInput').click()">
+      <div class="icon">&#128193;</div>
+      <div class="label">点击或拖拽上传提取文件</div>
+      <div class="hint">即「提取_xxx.txt」</div>
+    </div>
+    <input type="file" id="extractedInput" accept=".txt,.erb,.TXT,.ERB" style="display:none" onchange="onExtractedFileSelect(this)">
+    <div id="extractedFileInfo" style="margin-top:10px"></div>
+  </div>
+
+  <div id="restoreError" style="display:none"></div>
+  <div id="restoreResult" style="display:none">
+    <div class="card">
+      <div class="card-title" style="color:var(--green)">&#10003; 还原结果</div>
+      <div id="restoreStats" class="restore-stats"></div>
+      <div id="restoreWarn" style="display:none"></div>
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="downloadRestored()">&#11015; 下载还原后的文件</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">还原后文件预览</div>
+      <div id="restoredPreview" class="code-view"></div>
+    </div>
+  </div>
+</div>
+</main>
+
+<div class="footer">ERA 脚本行提取与还原工具 — 纯前端实现，无需服务器，数据不会上传</div>
+
+<script>
+// ============ Tab 切换 ============
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach((t,i) => {
+    t.classList.toggle('active', (name==='extract'?i===0:i===1));
+  });
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.getElementById('panel-' + name).classList.add('active');
+}
+
+// ============ 全局状态 ============
+let extractFileData = null;       // { name, text, lines }
+let extractResultData = null;     // { extractedContent, cleanedContent, extractedLines, stats }
+let cleanedFileData = null;
+let extractedFileData = null;
+let restoreResultData = null;
+
+// ============ 通用：拖拽 ============
+function setupDrop(id, onFile) {
+  const el = document.getElementById(id);
+  el.addEventListener('dragover', e => { e.preventDefault(); el.classList.add('dragover'); });
+  el.addEventListener('dragleave', e => { e.preventDefault(); el.classList.remove('dragover'); });
+  el.addEventListener('drop', e => {
+    e.preventDefault(); el.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) onFile(e.dataTransfer.files[0]);
+  });
+}
+setupDrop('extractDrop', f => onExtractFileSelect2(f));
+setupDrop('cleanedDrop', f => onCleanedFileSelect2(f));
+setupDrop('extractedDrop', f => onExtractedFileSelect2(f));
+
+// ============ 通用：下载 ============
+function downloadText(content, filename) {
+  // Add BOM for UTF-8 to ensure Windows notepad handles CJK correctly
+  const bom = '\uFEFF';
+  const blob = new Blob([bom + content], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+}
+
+// ============ 通用：读取文件文本（自动尝试 Shift_JIS） ============
+function readFileText(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      let text = reader.result;
+      // Remove BOM if present
+      if (text.charCodeAt(0) === 0xFEFF) text = text.substring(1);
+      resolve(text);
+    };
+    // Try UTF-8 first
+    reader.readAsText(file, 'utf-8');
+  });
+}
+
+// ============ 通用：显示文件信息 ============
+function showFileInfo(containerId, file, clearFn) {
+  const el = document.getElementById(containerId);
+  const sizeKB = (file.size / 1024).toFixed(1);
+  el.innerHTML = `<div class="file-info"><span class="name">&#128196; ${file.name}</span><span class="size">(${sizeKB} KB)</span><button class="remove" onclick="event.stopPropagation();${clearFn}()" title="移除">&times;</button></div>`;
+}
+
+// ============ 提取面板 ============
+function onExtractFileSelect(input) {
+  if (input.files.length > 0) onExtractFileSelect2(input.files[0]);
+}
+async function onExtractFileSelect2(file) {
+  const text = await readFileText(file);
+  extractFileData = { name: file.name, text, lines: text.split(/\r?\n/) };
+  showFileInfo('extractFileInfo', file, 'clearExtractFile');
+  doExtract();
+}
+function clearExtractFile() {
+  extractFileData = null;
+  document.getElementById('extractInput').value = '';
+  document.getElementById('extractFileInfo').innerHTML = '';
+  document.getElementById('extractResult').style.display = 'none';
+  document.getElementById('extractError').style.display = 'none';
+}
+
+function doExtract() {
+  if (!extractFileData) return;
+  const lines = extractFileData.lines;
+  const extractedLines = [];
+  const cleanedLines = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    const isComment = trimmed.startsWith(';');
+    const isPrint = !isComment && trimmed.toUpperCase().startsWith('PRINT');
+
+    if (isComment || isPrint) {
+      extractedLines.push({ lineNum: i + 1, content: lines[i], type: isComment ? 'comment' : 'print' });
+      cleanedLines.push('');
+    } else {
+      cleanedLines.push(lines[i]);
+    }
+  }
+
+  const extractedContent = extractedLines.map(l => `[${l.lineNum}] ${l.content}`).join('\n');
+  const cleanedContent = cleanedLines.join('\n');
+
+  extractResultData = {
+    extractedContent,
+    cleanedContent,
+    extractedLines,
+    stats: {
+      totalLines: lines.length,
+      extractedCount: extractedLines.length,
+      commentCount: extractedLines.filter(l => l.type === 'comment').length,
+      printCount: extractedLines.filter(l => l.type === 'print').length,
+    }
+  };
+
+  // 渲染结果
+  const s = extractResultData.stats;
+  document.getElementById('extractStats').innerHTML = `
+    <div class="stat stat-total"><div class="num">${s.totalLines}</div><div class="label">总行数</div></div>
+    <div class="stat stat-comment"><div class="num">${s.commentCount}</div><div class="label">注释行 (;)</div></div>
+    <div class="stat stat-print"><div class="num">${s.printCount}</div><div class="label">PRINT 行</div></div>
+    <div class="stat stat-extracted"><div class="num">${s.extractedCount}</div><div class="label">总计提取</div></div>
+  `;
+
+  // 原始预览
+  const op = document.getElementById('originalPreview');
+  let html = '';
+  for (let i = 0; i < lines.length; i++) {
+    const el = extractedLines.find(e => e.lineNum === i + 1);
+    let cls = 'line';
+    let badge = '';
+    if (el) {
+      cls += el.type === 'comment' ? ' comment' : ' print';
+      badge = el.type === 'comment'
+        ? '<span class="badge badge-comment">;</span>'
+        : '<span class="badge badge-print">PRINT</span>';
+    }
+    const escaped = escapeHtml(lines[i]) || ' ';
+    html += `<div class="${cls}"><span class="ln">${i+1}</span><span class="lc">${badge}${escaped}</span></div>`;
+  }
+  op.innerHTML = html;
+
+  // 提取预览
+  const ep = document.getElementById('extractedPreview');
+  document.getElementById('extractCountDesc').textContent = `提取出的 ${s.extractedCount} 行内容`;
+  html = '';
+  for (let i = 0; i < extractedLines.length; i++) {
+    const el = extractedLines[i];
+    const cls = el.type === 'comment' ? 'comment' : 'print';
+    html += `<div class="line ${cls}"><span class="ln">${i+1}</span><span class="lc"><span class="badge badge-orig">${el.lineNum}</span>${escapeHtml(el.content)}</span></div>`;
+  }
+  ep.innerHTML = html;
+
+  document.getElementById('extractResult').style.display = 'block';
+  document.getElementById('extractError').style.display = 'none';
+}
+
+function downloadExtracted() {
+  if (!extractResultData || !extractFileData) return;
+  const baseName = extractFileData.name.replace(/\.[^.]+$/, '');
+  downloadText(extractResultData.extractedContent, `提取_${baseName}.txt`);
+}
+function downloadCleaned() {
+  if (!extractResultData || !extractFileData) return;
+  const baseName = extractFileData.name.replace(/\.[^.]+$/, '');
+  downloadText(extractResultData.cleanedContent, `清理后_${baseName}.txt`);
+}
+
+// ============ 还原面板 ============
+function onCleanedFileSelect(input) {
+  if (input.files.length > 0) onCleanedFileSelect2(input.files[0]);
+}
+function onExtractedFileSelect(input) {
+  if (input.files.length > 0) onExtractedFileSelect2(input.files[0]);
+}
+async function onCleanedFileSelect2(file) {
+  cleanedFileData = { name: file.name, text: await readFileText(file), lines: null };
+  showFileInfo('cleanedFileInfo', file, 'clearCleanedFile');
+  tryRestore();
+}
+async function onExtractedFileSelect2(file) {
+  extractedFileData = { name: file.name, text: await readFileText(file), lines: null };
+  showFileInfo('extractedFileInfo', file, 'clearExtractedFile');
+  tryRestore();
+}
+function clearCleanedFile() {
+  cleanedFileData = null;
+  document.getElementById('cleanedInput').value = '';
+  document.getElementById('cleanedFileInfo').innerHTML = '';
+  document.getElementById('restoreResult').style.display = 'none';
+}
+function clearExtractedFile() {
+  extractedFileData = null;
+  document.getElementById('extractedInput').value = '';
+  document.getElementById('extractedFileInfo').innerHTML = '';
+  document.getElementById('restoreResult').style.display = 'none';
+}
+
+function tryRestore() {
+  if (!cleanedFileData || !extractedFileData) return;
+  document.getElementById('restoreError').style.display = 'none';
+
+  const cleanedLines = cleanedFileData.text.split(/\r?\n/);
+  const extractedLines = extractedFileData.text.split(/\r?\n/);
+  const restoreMap = new Map();
+
+  for (const line of extractedLines) {
+    const match = line.match(/^\[(\d+)\]\s?(.*)/);
+    if (match) {
+      restoreMap.set(parseInt(match[1], 10), match[2]);
+    }
+  }
+
+  const restoredLines = [];
+  let restoredCount = 0;
+
+  for (let i = 0; i < cleanedLines.length; i++) {
+    const lineNum = i + 1;
+    if (restoreMap.has(lineNum)) {
+      restoredLines.push(restoreMap.get(lineNum));
+      restoredCount++;
+    } else {
+      restoredLines.push(cleanedLines[i]);
+    }
+  }
+
+  const restoredContent = restoredLines.join('\n');
+  restoreResultData = { restoredContent, restoredCount, totalRestored: restoreMap.size, totalCleanedLines: cleanedLines.length };
+
+  // 渲染
+  const rs = document.getElementById('restoreStats');
+  rs.innerHTML = `
+    <div class="stat stat-extracted"><div class="num">${restoreResultData.restoredCount}</div><div class="label">已还原行数</div></div>
+    <div class="stat stat-total"><div class="num">${restoreResultData.totalRestored}</div><div class="label">提取文件中的行数</div></div>
+    <div class="stat stat-total"><div class="num">${restoreResultData.totalCleanedLines}</div><div class="label">清理文件总行数</div></div>
+  `;
+
+  const warn = document.getElementById('restoreWarn');
+  if (restoreResultData.restoredCount < restoreResultData.totalRestored) {
+    warn.style.display = 'block';
+    warn.innerHTML = `<div class="alert alert-warn">&#9888; 注意：有 ${restoreResultData.totalRestored - restoreResultData.restoredCount} 行未能还原，可能是因为清理后的文件与提取文件不匹配。</div>`;
+  } else {
+    warn.style.display = 'none';
+  }
+
+  // 预览
+  const rp = document.getElementById('restoredPreview');
+  let html = '';
+  const rl = restoredContent.split('\n');
+  for (let i = 0; i < rl.length; i++) {
+    const escaped = escapeHtml(rl[i]) || ' ';
+    html += `<div class="line"><span class="ln">${i+1}</span><span class="lc">${escaped}</span></div>`;
+  }
+  rp.innerHTML = html;
+
+  document.getElementById('restoreResult').style.display = 'block';
+}
+
+function downloadRestored() {
+  if (!restoreResultData || !cleanedFileData) return;
+  const baseName = cleanedFileData.name.replace(/^清理后_/, '').replace(/\.[^.]+$/, '');
+  downloadText(restoreResultData.restoredContent, `还原_${baseName}.txt`);
+}
+
+// ============ 工具函数 ============
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
